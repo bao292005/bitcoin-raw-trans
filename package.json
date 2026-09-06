@@ -1,0 +1,22 @@
+{
+  "name": "bitcoin-raw-trans",
+  "version": "1.0.0",
+  "description": "Toan bo quy trinh tao/ky/phat song giao dich Bitcoin tren testnet (P2PKH, P2SH-P2WPKH, P2WPKH, P2TR)",
+  "type": "module",
+  "bin": {
+    "btc": "src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "genkey": "node src/index.js genkey",
+    "addr": "node src/index.js addr",
+    "balance": "node src/index.js balance",
+    "send": "node src/index.js send",
+    "test": "node test/selftest.js"
+  },
+  "dependencies": {
+    "bitcoinjs-lib": "^6.1.6",
+    "ecpair": "^2.1.0",
+    "tiny-secp256k1": "^2.2.3"
+  }
+}
