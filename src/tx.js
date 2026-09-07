@@ -7,6 +7,7 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import { network } from './config.js';
 import { toXOnly } from './wallet.js';
+import { explainManualPipeline } from './debug/inspect.js';
 
 // Tao signer da "tweak" cho Taproot key-path spend (BIP341).
 // Public key noi bo duoc tweak bang taggedHash('TapTweak', xOnlyPubkey).
@@ -18,7 +19,8 @@ function tweakTaprootSigner(keyPair) {
 
 // inputs: [{ txid, vout, value, type, payment, nonWitnessUtxo? }]
 // outputs: [{ address, value }]
-export function buildAndSign({ keyPair, inputs, outputs }) {
+// debug=true -> "mo nap" tung buoc (tu tinh sighash, tu ky, doi chieu voi PSBT).
+export function buildAndSign({ keyPair, inputs, outputs, debug = false }) {
   const psbt = new bitcoin.Psbt({ network });
 
   // --- BUOC 4: Dinh hinh cau truc giao dich chua ky (inputs + outputs) ---
@@ -76,8 +78,13 @@ export function buildAndSign({ keyPair, inputs, outputs }) {
 
   // --- BUOC 7: Serialize thanh raw hex hoan chinh ---
   const tx = psbt.extractTransaction();
+  const hex = tx.toHex();
+
+  // DEBUG SAU: tai dung ca pipeline bang tay va doi chieu voi ket qua PSBT o tren.
+  if (debug) explainManualPipeline({ keyPair, inputs, outputs, psbtHex: hex });
+
   return {
-    hex: tx.toHex(),
+    hex,
     txid: tx.getId(),
     vsize: tx.virtualSize(),
     weight: tx.weight(),

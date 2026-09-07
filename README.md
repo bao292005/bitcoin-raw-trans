@@ -38,6 +38,36 @@ node src/index.js send <WIF> <địa_chỉ_nhận> <số_sat>
 node src/index.js send <WIF> <địa_chỉ_nhận> <số_sat> --broadcast
 ```
 
+## Debug sâu (học từng bước)
+
+Muốn "mở nắp" phần mà PSBT giấu kín — tự tay tính **sighash**, tự ký, tự ghép
+**scriptSig/witness** rồi đối chiếu byte-for-byte với PSBT:
+
+```bash
+# A. Walkthrough OFFLINE — không cần tiền test, chạy lại vô hạn lần.
+#    Đi qua CẢ 8 BƯỚC bằng dữ liệu giả (quét UTXO, coin selection, ký 4 loại...).
+npm run walkthrough
+
+# B. Trên luồng THẬT — thêm cờ --debug.
+node src/index.js balance <WIF> --debug                         # sâu Bước 1-2
+node src/index.js send <WIF> <địa_chỉ_nhận> <số_sat> --debug    # sâu cả 8 bước
+```
+
+Debug "mở nắp" **đủ 8 bước**:
+- **Bước 1** — pubkey → x-only → hash160 → scriptPubKey từng loại, và phép *tweak* Taproot (BIP341).
+- **Bước 2** — endpoint API gọi cho từng địa chỉ, danh sách UTXO trả về, trạng thái confirmed/mempool.
+- **Bước 3** — bảng vByte theo loại input/output, sắp xếp largest-first, **từng vòng lặp** chọn UTXO kèm phép tính phí và lý do quyết định (tạo change / gộp dust).
+- **Bước 4** — cấu trúc inputs/outputs của giao dịch chưa ký.
+- **Bước 5** — **preimage** (chuỗi byte trước khi băm) tách theo từng trường + **sighash tự tính**, kèm `✓` khớp hàm chuẩn (`hashForSignature`/`hashForWitnessV0`/`hashForWitnessV1`).
+- **Bước 6** — chữ ký ECDSA (DER + byte sighash) hoặc Schnorr (64B), cách ghép vào scriptSig/witness.
+- **Bước 7** — raw hex tách theo trường (cả phần witness) + vsize/weight/txid.
+- **Bước 8** — mô tả request `POST /tx` sẽ gửi (dry-run không gửi nếu thiếu `--broadcast`).
+- **Đối chiếu cuối** — **raw hex tự tay == raw hex PSBT**, khớp từng byte.
+
+Cài đặt ở `src/debug/sighash-manual.js` (3 luật sighash thuần Buffer) và
+`src/debug/inspect.js` (in + coin-selection trace + tự ký + đối chiếu). Trace của
+coin selection nằm trong `src/coinselect.js` (trường `trace`).
+
 Private key có thể đặt qua biến môi trường thay cho tham số:
 
 ```bash

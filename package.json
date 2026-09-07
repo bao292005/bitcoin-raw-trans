@@ -12,7 +12,8 @@
     "addr": "node src/index.js addr",
     "balance": "node src/index.js balance",
     "send": "node src/index.js send",
-    "test": "node test/selftest.js"
+    "test": "node test/selftest.js",
+    "walkthrough": "node --env-file=.env test/walkthrough.js"
   },
   "dependencies": {
     "bitcoinjs-lib": "^6.1.6",

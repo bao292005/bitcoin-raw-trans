@@ -12,6 +12,12 @@ import { loadKeyPair, addressIndex } from './wallet.js';
 import { fetchUtxos, fetchTxHex, fetchFeeRate, broadcast } from './api.js';
 import { selectCoins } from './coinselect.js';
 import { buildAndSign } from './tx.js';
+import {
+  explainAddresses,
+  explainUtxoScan,
+  explainCoinSelection,
+  explainBroadcastRequest,
+} from './debug/inspect.js';
 import * as bitcoin from 'bitcoinjs-lib';
 
 const fmt = (sat) => `${sat} sat (${(sat / 1e8).toFixed(8)} BTC)`;
@@ -73,11 +79,13 @@ async function cmdAddr(wif) {
   printAddresses(derived);
 }
 
-async function cmdBalance(wif) {
+async function cmdBalance(wif, flags = {}) {
   const kp = loadKeyPair(wif);
-  const { index } = addressIndex(kp);
+  const { derived, index } = addressIndex(kp);
+  if (flags.debug) explainAddresses(kp, derived);
   console.log(`Dang quet UTXO tren ${API_BASE} ...\n`);
   const utxos = await scanAllUtxos(index);
+  if (flags.debug) explainUtxoScan({ apiBase: API_BASE, index, utxos });
   let total = 0;
   for (const u of utxos) {
     total += u.value;
@@ -98,8 +106,12 @@ async function cmdSend(wif, to, amountStr, flags) {
   const destType = classifyAddress(to);
   const changeAddress = derived.p2wpkh.address; // tra tien thoi ve dia chi SegWit (output re)
 
+  // DEBUG SAU (Buoc 1): mo nap phan khoa & dia chi truoc khi quet UTXO.
+  if (flags.debug) explainAddresses(kp, derived);
+
   console.log('== Buoc 2: Quet UTXO ==');
   const utxos = await scanAllUtxos(index);
+  if (flags.debug) explainUtxoScan({ apiBase: API_BASE, index, utxos });
   const spendable = utxos.filter((u) => u.confirmed);
   console.log(`  Tim thay ${utxos.length} UTXO (${spendable.length} da confirmed, dung de chi).`);
   if (!spendable.length) throw new Error('Khong co UTXO confirmed de chi tieu.');
@@ -115,6 +127,7 @@ async function cmdSend(wif, to, amountStr, flags) {
     changeType: 'p2wpkh',
     destType,
   });
+  if (flags.debug) explainCoinSelection(selection.trace);
   console.log(`  Chon ${selection.inputs.length} input, phi ~${fmt(selection.fee)}`);
   selection.inputs.forEach((u) =>
     console.log(`    - [${u.type}] ${u.txid}:${u.vout} ${fmt(u.value)}`)
@@ -137,13 +150,19 @@ async function cmdSend(wif, to, amountStr, flags) {
   }
 
   console.log('\n== Buoc 5-7: Ky (Sighash + ECDSA/Schnorr) & Serialize ==');
-  const { hex, txid, vsize, weight } = buildAndSign({ keyPair: kp, inputs: selection.inputs, outputs });
+  const { hex, txid, vsize, weight } = buildAndSign({
+    keyPair: kp,
+    inputs: selection.inputs,
+    outputs,
+    debug: flags.debug,
+  });
   console.log(`  txid (du kien): ${txid}`);
   console.log(`  vsize: ${vsize} vByte | weight: ${weight} WU`);
   console.log('\n  Raw transaction hex:');
   console.log('  ' + hex);
 
   console.log('\n== Buoc 8: Phat song (Broadcast) ==');
+  if (flags.debug) explainBroadcastRequest({ apiBase: API_BASE, hex, willSend: flags.broadcast });
   if (flags.broadcast) {
     const sent = await broadcast(hex);
     console.log(`  DA PHAT SONG! txid: ${sent}`);
@@ -156,7 +175,7 @@ async function cmdSend(wif, to, amountStr, flags) {
 
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
-  const flags = { broadcast: rest.includes('--broadcast') };
+  const flags = { broadcast: rest.includes('--broadcast'), debug: rest.includes('--debug') };
   const args = rest.filter((a) => !a.startsWith('--'));
   const wif = args[0] || process.env.PRIVATE_KEY;
 
@@ -167,7 +186,7 @@ async function main() {
       case 'addr':
         return await cmdAddr(requireWif(wif));
       case 'balance':
-        return await cmdBalance(requireWif(wif));
+        return await cmdBalance(requireWif(wif), flags);
       case 'send':
         return await cmdSend(requireWif(wif), args[1], args[2], flags);
       default:
@@ -191,8 +210,9 @@ Cach dung:
   node src/index.js genkey
   node src/index.js addr    <WIF>
   node src/index.js balance <WIF>
-  node src/index.js send    <WIF> <dia_chi_nhan> <so_sat> [--broadcast]
+  node src/index.js send    <WIF> <dia_chi_nhan> <so_sat> [--broadcast] [--debug]
 
+Co --debug: mo nap tung buoc (tu tinh sighash, tu ky, doi chieu voi PSBT).
 Private key co the dat qua bien moi truong PRIVATE_KEY thay cho tham so.`);
 }
 

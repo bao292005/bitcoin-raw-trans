@@ -21,10 +21,10 @@ export const OUTPUT_VBYTES = {
   'p2tr': 43,
 };
 
-const TX_OVERHEAD = 11; // version + locktime + so luong in/out + marker/flag segwit
+export const TX_OVERHEAD = 11; // version + locktime + so luong in/out + marker/flag segwit
 
 // Nguong dust: output nho hon nguong nay khong dang tao (phi > gia tri).
-const DUST = 546;
+export const DUST = 546;
 
 // utxos: [{ txid, vout, value, type }]  (da gan 'type' theo dia chi so huu)
 // targets: tong so sat can gui (chua ke phi)
@@ -39,6 +39,13 @@ export function selectCoins({ utxos, target, feeRate, changeType = 'p2wpkh', des
   const baseVbytes = TX_OVERHEAD + OUTPUT_VBYTES[destType]; // output nhan chinh
   const changeVbytes = OUTPUT_VBYTES[changeType];
 
+  // Ghi lai "nhat ky" tung vong lap de DEBUG SAU co the in ra ly do chon.
+  const trace = {
+    target, feeRate, destType, changeType, baseVbytes, changeVbytes,
+    sorted: sorted.map((u) => ({ type: u.type, value: u.value, txid: u.txid, vout: u.vout })),
+    steps: [],
+  };
+
   for (const utxo of sorted) {
     selected.push(utxo);
     inputSum += utxo.value;
@@ -49,19 +56,31 @@ export function selectCoins({ utxos, target, feeRate, changeType = 'p2wpkh', des
     const feeWithChange = Math.ceil((baseVbytes + inputsVbytes + changeVbytes) * feeRate);
     const feeNoChange = Math.ceil((baseVbytes + inputsVbytes) * feeRate);
 
+    const step = {
+      added: { type: utxo.type, value: utxo.value },
+      inputSum, inputsVbytes, feeWithChange, feeNoChange,
+      needWithChange: target + feeWithChange,
+      needNoChange: target + feeNoChange,
+      decision: 'chua du -> them UTXO tiep',
+    };
+    trace.steps.push(step);
+
     // Kich ban co change: du tien cho target + phi + it nhat 1 dust change?
     if (inputSum >= target + feeWithChange) {
       const change = inputSum - target - feeWithChange;
       if (change >= DUST) {
-        return { inputs: selected, fee: feeWithChange, change, changeType };
+        step.decision = `DU, change=${change} >= dust(${DUST}) -> TAO output change`;
+        return { inputs: selected, fee: feeWithChange, change, changeType, trace };
       }
       // change qua nho -> gop luon vao phi, khong tao output change.
-      return { inputs: selected, fee: inputSum - target, change: 0, changeType };
+      step.decision = `DU nhung change=${change} < dust(${DUST}) -> gop change vao phi`;
+      return { inputs: selected, fee: inputSum - target, change: 0, changeType, trace };
     }
 
     // Kich ban khong change: vua khit (phan du nho hon dust cung gop vao phi).
     if (inputSum >= target + feeNoChange && inputSum - target - feeNoChange < DUST) {
-      return { inputs: selected, fee: inputSum - target, change: 0, changeType };
+      step.decision = `vua khit (khong change), phan du ${inputSum - target - feeNoChange} gop vao phi`;
+      return { inputs: selected, fee: inputSum - target, change: 0, changeType, trace };
     }
   }
 
