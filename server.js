@@ -12,6 +12,7 @@ import { NETWORK_NAME, USE_RPC, API_BASE } from './src/config.js';
 import { loadKeyPair, addressIndex } from './src/wallet.js';
 import { fetchUtxos, fetchTxHex, fetchFeeRate, broadcast } from './src/api.js';
 import { selectCoins, dustThreshold, DUST_BY_TYPE } from './src/coinselect.js';
+import { requestLogger, logError, logShort } from './src/logger.js';
 import { buildAndSign } from './src/tx.js';
 import * as bitcoin from 'bitcoinjs-lib';
 import { network } from './src/config.js';
@@ -33,6 +34,8 @@ if (NETWORK_NAME === 'mainnet') {
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
+// Dat SAU express.json de con log duoc tham so trong body.
+app.use(requestLogger());
 
 // Bat loi cua handler -> luon tra JSON.
 // Phai la ham async: neu chi lam Promise.resolve(fn(...)) thi loi nem DONG BO
@@ -42,6 +45,7 @@ const wrap = (fn) => async (req, res) => {
   try {
     await fn(req, res);
   } catch (err) {
+    logError(err.message);
     res.status(400).json({ error: err.message });
   }
 };
@@ -98,7 +102,7 @@ async function scanAllUtxos(index) {
 // ---------------------------------------------------------------------------
 app.get(
   '/api/network',
-  wrap(async (_req, res) => {
+  wrap(async (req, res) => {
     const info = {
       network: NETWORK_NAME,
       useRpc: USE_RPC,
@@ -124,6 +128,11 @@ app.get(
     }
 
     info.feeRate = await fetchFeeRate().catch(() => null);
+    req.log(
+      info.connected
+        ? `${info.network} · height ${info.blocks ?? '?'} · miner ${info.minerBalance ?? '?'} sat · phi ${info.feeRate} sat/vB`
+        : `${info.network} · MAT KET NOI: ${info.error}`
+    );
     res.json(info);
   })
 );
@@ -136,6 +145,7 @@ app.post(
   wrap((req, res) => {
     const kp = keyFrom(req.body);
     const { derived } = addressIndex(kp);
+    req.log(`mo vi: pubkey ${logShort(Buffer.from(kp.publicKey).toString('hex'), 8, 4)} -> 4 dia chi`);
     res.json({
       network: NETWORK_NAME,
       publicKey: Buffer.from(kp.publicKey).toString('hex'),
@@ -151,9 +161,10 @@ app.post(
 // Tao vi moi ngau nhien.
 app.post(
   '/api/genkey',
-  wrap((_req, res) => {
+  wrap((req, res) => {
     const kp = loadKeyPair();
     const { derived } = addressIndex(kp);
+    req.log(`tao vi moi: ${derived.p2wpkh.address}`);
     res.json({
       wif: kp.toWIF(),
       publicKey: Buffer.from(kp.publicKey).toString('hex'),
@@ -174,7 +185,14 @@ app.post(
   wrap(async (req, res) => {
     const kp = keyFrom(req.body);
     const { index } = addressIndex(kp);
+    const t = req.timer();
     const utxos = await scanAllUtxos(index);
+    const byType = utxos.reduce((m, u) => ({ ...m, [u.type]: (m[u.type] || 0) + 1 }), {});
+    req.log(
+      `quet 4 dia chi: ${utxos.length} UTXO` +
+        (utxos.length ? ` [${Object.entries(byType).map(([k, v]) => `${k}:${v}`).join(' ')}]` : '') +
+        ` = ${utxos.reduce((s, u) => s + u.value, 0)} sat (${t()}ms)`
+    );
     res.json({
       utxos,
       total: utxos.reduce((s, u) => s + u.value, 0),
@@ -212,11 +230,21 @@ app.post(
     if (!recipients.length) throw new Error('Chua co nguoi nhan nao.');
 
     const target = recipients.reduce((s, r) => s + r.value, 0);
+    req.log(
+      `nguoi nhan: ${recipients.map((r) => `${r.value} sat -> ${r.type}`).join(', ')}` +
+        ` (tong ${target} sat)`
+    );
+
     const feeRate = Number(req.body.feeRate) || (await fetchFeeRate());
+    req.log(`phi thi truong: ${feeRate} sat/vByte`);
 
     // Buoc 2
+    let t = req.timer();
     const all = await scanAllUtxos(index);
     const spendable = all.filter((u) => u.confirmed);
+    req.log(
+      `quet UTXO: ${all.length} tim thay, ${spendable.length} confirmed (${t()}ms)`
+    );
     if (!spendable.length) throw new Error('Khong co UTXO confirmed de chi tieu.');
 
     // Buoc 3 — tra ve ca .trace de UI hien thi ly do chon
@@ -227,12 +255,23 @@ app.post(
       changeType: 'p2wpkh',
       destOutputs: recipients,
     });
+    req.log(
+      `coin selection: ${selection.inputs.length} input sau ${selection.trace.steps.length} vong,` +
+        ` phi ${selection.fee} sat, change ${selection.change} sat`
+    );
 
     // Gan lai payment (selectCoins tra ve chinh object utxo, nhung ta doc tu
     // `all` da bo payment de JSON hoa duoc) va lay raw tx cho input Legacy.
     const inputs = selection.inputs.map((u) => ({ ...u, payment: index[u.address].payment }));
     for (const inp of inputs) {
-      if (inp.type === 'p2pkh') inp.nonWitnessUtxo = await fetchTxHex(inp.txid);
+      if (inp.type === 'p2pkh') {
+        t = req.timer();
+        inp.nonWitnessUtxo = await fetchTxHex(inp.txid);
+        req.log(
+          `raw tx cho input Legacy ${logShort(inp.txid, 8, 4)}:` +
+            ` ${inp.nonWitnessUtxo.length / 2} byte (${t()}ms)`
+        );
+      }
     }
 
     const changeAddress = derived.p2wpkh.address;
@@ -240,7 +279,16 @@ app.post(
     if (selection.change > 0) outputs.push({ address: changeAddress, value: selection.change });
 
     // Buoc 4-7
+    t = req.timer();
     const signed = buildAndSign({ keyPair: kp, inputs, outputs });
+    req.log(
+      `ky ${inputs.length} input: ` +
+        inputs.map((i) => `${i.type}(${i.type === 'p2tr' ? 'Schnorr' : 'ECDSA'})`).join(', ') +
+        ` (${t()}ms)`
+    );
+    req.log(
+      `txid ${logShort(signed.txid, 8, 4)}  vsize ${signed.vsize} vB  raw ${signed.hex.length / 2} byte`
+    );
 
     const result = {
       feeRate,
@@ -269,14 +317,21 @@ app.post(
 
     // Buoc 8
     if (req.body.broadcast) {
+      t = req.timer();
       result.txid = await broadcast(signed.hex);
       result.broadcast = true;
+      req.log(`PHAT SONG -> ${result.txid} (${t()}ms)`);
+
       if (USE_RPC) {
         // regtest khong ai dao ho -> tu dao 1 block de confirm.
-        const { mineBlocks } = await requireRpc();
+        const { mineBlocks, getChainInfo } = await requireRpc();
         await mineBlocks(1);
+        const info = await getChainInfo();
         result.mined = true;
+        req.log(`dao 1 block de xac nhan -> height ${info.blocks}`);
       }
+    } else {
+      req.log('dry-run: khong phat song');
     }
 
     res.json(result);
@@ -294,8 +349,10 @@ app.post(
     if (!Number.isInteger(n) || n <= 0 || n > 1000) {
       throw new Error(`So block khong hop le: ${req.body.blocks} (1-1000).`);
     }
+    const t = req.timer();
     const hashes = await mineBlocks(n, req.body.address || null);
     const info = await getChainInfo();
+    req.log(`dao ${hashes.length} block -> height ${info.blocks} (${t()}ms)`);
     res.json({ mined: hashes.length, blocks: info.blocks, lastHash: hashes[hashes.length - 1] });
   })
 );
@@ -333,7 +390,10 @@ app.post(
     }
 
     const total = chosen.reduce((s, c) => s + c.value, 0);
+    req.log(`rot vao: ${chosen.map((c) => `${c.key}:${c.value}`).join(' ')} (tong ${total} sat)`);
+
     const balance = await getMinerBalance();
+    req.log(`so du vi miner: ${balance} sat`);
     if (balance < total) {
       throw new Error(
         `Vi miner chi co ${balance} sat, can ${total} sat. Hay dao them block truoc.`
@@ -341,8 +401,13 @@ app.post(
     }
 
     const targets = Object.fromEntries(chosen.map((c) => [c.address, c.value]));
+    let t = req.timer();
     const txid = await sendFromMiner(targets);
+    req.log(`gui tu vi miner -> ${txid} (${t()}ms)`);
+
+    t = req.timer();
     await mineBlocks(1);
+    req.log(`dao 1 block de xac nhan (${t()}ms)`);
 
     res.json({ txid, total, targets: chosen });
   })

@@ -78,21 +78,27 @@
   },
   "hotPaths": [
     {
+      "path": "server.js",
+      "accessCount": 26,
+      "lastAccessed": 1788851675168,
+      "type": "file"
+    },
+    {
       "path": "src/index.js",
       "accessCount": 18,
       "lastAccessed": 1788850374830,
       "type": "file"
     },
     {
-      "path": "server.js",
+      "path": "README.md",
       "accessCount": 12,
-      "lastAccessed": 1788848502466,
+      "lastAccessed": 1788851785361,
       "type": "file"
     },
     {
-      "path": "README.md",
-      "accessCount": 11,
-      "lastAccessed": 1788850493977,
+      "path": "src/rpc.js",
+      "accessCount": 7,
+      "lastAccessed": 1788852480963,
       "type": "file"
     },
     {
@@ -168,9 +174,9 @@
       "type": "file"
     },
     {
-      "path": "src/rpc.js",
+      "path": "src/logger.js",
       "accessCount": 2,
-      "lastAccessed": 1788850339682,
+      "lastAccessed": 1788851380783,
       "type": "file"
     },
     {

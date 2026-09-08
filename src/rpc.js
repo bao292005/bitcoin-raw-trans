@@ -46,23 +46,43 @@ export async function rpc(method, params = [], walletName = null) {
 // Goi RPC tren vi miner.
 export const rpcWallet = (method, params = []) => rpc(method, params, RPC_WALLET);
 
-// Dam bao vi miner ton tai va da duoc load. Goi nhieu lan van an toan.
-export async function ensureWallet() {
+// Dam bao mot vi ton tai, da duoc nap, VA nam trong danh sach tu-nap khi
+// bitcoind khoi dong lai. Goi nhieu lan van an toan.
+//
+// watchOnly=true -> vi khong giu private key (chi theo doi dia chi).
+async function ensureWalletNamed(name, watchOnly = false) {
   const loaded = await rpc('listwallets');
-  if (loaded.includes(RPC_WALLET)) return RPC_WALLET;
+
+  if (loaded.includes(name)) {
+    // Vi dang nap nhung CHUA chac nam trong settings.json. Chi co loadwallet /
+    // unloadwallet moi ghi duoc co load_on_startup, nen phai nha ra roi nap lai.
+    // Neu khong, restart node la vi bien mat khoi listwallets.
+    await rpc('unloadwallet', [name, /* load_on_startup */ true]);
+  }
 
   try {
-    await rpc('loadwallet', [RPC_WALLET]);
+    await rpc('loadwallet', [name, /* load_on_startup */ true]);
   } catch (err) {
-    // -18: vi chua ton tai tren dia -> tao moi (descriptor wallet, co private key).
+    // -18: chua ton tai tren dia -> tao moi.
     if (err.rpcCode === -18) {
-      await rpc('createwallet', [RPC_WALLET]);
+      await rpc('createwallet', [
+        name,
+        /* disable_private_keys */ watchOnly,
+        /* blank */ false,
+        /* passphrase */ '',
+        /* avoid_reuse */ false,
+        /* descriptors */ true,
+        /* load_on_startup */ true,
+      ]);
     } else {
       throw err;
     }
   }
-  return RPC_WALLET;
+  return name;
 }
+
+// Vi miner: dao block va lam nguon tien cho faucet. Co private key.
+export const ensureWallet = () => ensureWalletNamed(RPC_WALLET, false);
 
 // Lay mot dia chi cua vi miner de nhan thuong dao block.
 export async function getMinerAddress() {
@@ -98,23 +118,8 @@ export async function getMinerBalance() {
 // doi duoc dia chi va hien giao dich, nhung khong ky duoc. Viec ky van do
 // src/tx.js dam nhan.
 
-// Bao dam ton tai mot vi chi-xem ten cho truoc. Goi lai nhieu lan van an toan.
-export async function ensureWatchWallet(name) {
-  const loaded = await rpc('listwallets');
-  if (loaded.includes(name)) return name;
-
-  try {
-    await rpc('loadwallet', [name]);
-  } catch (err) {
-    // -18: chua ton tai tren dia -> tao moi, tat private key.
-    if (err.rpcCode === -18) {
-      await rpc('createwallet', [name, /* disable_private_keys */ true]);
-    } else {
-      throw err;
-    }
-  }
-  return name;
-}
+// Vi CHI-XEM: khong co private key, chi theo doi dia chi de hien thi.
+export const ensureWatchWallet = (name) => ensureWalletNamed(name, true);
 
 // Them checksum cho descriptor (Core bat buoc phai co).
 async function withChecksum(desc) {

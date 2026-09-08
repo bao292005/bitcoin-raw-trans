@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"npm run web:build 2>&1 | tail -8; echo \\\"--- kiem tra ---\\\"; ls -la /Users/nguyenquocbao/bitcoin-raw-trans/web/dist 2>/dev/null\",\"timeout\":300000,\"description\":\"Build web UI from project r...",
-  "error": "Exit code 1\n\n> bitcoin-raw-trans@1.0.0 web:build\n> cd web && npm install && npm run build\n\nsh: line 0: cd: web: No such file or directory\n--- kiem tra ---",
-  "timestamp": "2026-09-08T06:13:29.152Z",
-  "retry_count": 1
+  "tool_input_preview": "{\"command\":\"cd /Users/nguyenquocbao/bitcoin-raw-trans\\necho \\\"=== So du vi chi-xem ===\\\"\\n./scripts/node.sh cli -rpcwallet=watch-0348783d getbalance 2>/dev/null\\necho \\\"=== 5 giao dich gan nhat ===\\\"\\...",
+  "error": "Exit code 1\n=== So du vi chi-xem ===\n=== 5 giao dich gan nhat ===\nTraceback (most recent call last):\n  File \"<string>\", line 3, in <module>\n  File \"/opt/anaconda3/lib/python3.12/json/__init__.py\", line 293, in load\n    return loads(fp.read(),\n           ^^^^^^^^^^^^^^^^\n  File \"/opt/anaconda3/lib/python3.12/json/__init__.py\", line 346, in loads\n    return _default_decoder.decode(s)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/anaconda3/lib/python3.12/json/decoder.py\", line 337, in decode\n ...",
+  "timestamp": "2026-09-08T07:25:42.036Z",
+  "retry_count": 2
 }

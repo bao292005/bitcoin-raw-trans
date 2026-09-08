@@ -135,10 +135,36 @@ Bảy màn: **Dashboard** (số dư theo từng loại địa chỉ), **Gửi**,
 từng vòng lặp coin selection kèm lý do, cấu trúc input/output, cách ghép chữ ký
 theo từng loại địa chỉ, và raw hex. Xem xong mới bấm phát sóng.
 
+### Log ở terminal
+
+Terminal chạy `npm run web` in chi tiết từng lời gọi API — tham số, từng bước xử
+lý kèm thời gian, kết quả:
+
+```
+14:14:11  POST /api/build
+  wif=cPzD…F4t  recipients=1  broadcast=true
+  → nguoi nhan: 900000 sat -> p2wpkh (tong 900000 sat)
+  → phi thi truong: 11 sat/vByte
+  → quet UTXO: 32 tim thay, 32 confirmed (124ms)
+  → coin selection: 1 input sau 1 vong, phi 1551 sat, change 6193776 sat
+  → ky 1 input: p2wpkh(ECDSA) (7ms)
+  → txid df1da467…df80  vsize 141 vB  raw 222 byte
+  → PHAT SONG -> df1da4670b669a43576717df3912ec83556cd55af448d8ed973f1077a78edf80 (2ms)
+  → dao 1 block de xac nhan -> height 139
+  200 OK  (162ms)
+```
+
+- **Private key luôn bị che** (`cPzD…F4t`) — không bao giờ ghi đầy đủ ra log.
+- Chỉ log `/api`, bỏ qua file tĩnh của giao diện.
+- Tắt: `LOG=off npm run web`
+
+Cài đặt ở `src/logger.js`.
+
 ### Kiến trúc
 
 ```
 server.js          Express, chỉ bind 127.0.0.1, lớp mỏng bọc src/
+src/logger.js      log request ra terminal (che private key)
 frontend/          React 19 + Vite + TypeScript
   src/api.ts       gọi /api, có type đầy đủ
   src/useWallet.ts state ví dùng chung (Context)
