@@ -27,21 +27,32 @@ export const TX_OVERHEAD = 11; // version + locktime + so luong in/out + marker/
 export const DUST = 546;
 
 // utxos: [{ txid, vout, value, type }]  (da gan 'type' theo dia chi so huu)
-// targets: tong so sat can gui (chua ke phi)
+// target: tong so sat can gui (chua ke phi)
 // feeRate: sat/vByte
 // changeType: loai dia chi nhan tien thoi (change)
-export function selectCoins({ utxos, target, feeRate, changeType = 'p2wpkh', destType = 'p2wpkh' }) {
+// destOutputs: mang cac output nguoi nhan [{ address, value, type? }]
+export function selectCoins({ utxos, target, feeRate, changeType = 'p2wpkh', destType = 'p2wpkh', destOutputs }) {
   const sorted = [...utxos].sort((a, b) => b.value - a.value);
 
   const selected = [];
   let inputSum = 0;
 
-  const baseVbytes = TX_OVERHEAD + OUTPUT_VBYTES[destType]; // output nhan chinh
-  const changeVbytes = OUTPUT_VBYTES[changeType];
+  // Neu truyen danh sach nhieu output destOutputs thi tinh tong target & baseVbytes
+  let totalTarget = target;
+  let baseVbytes = TX_OVERHEAD;
+
+  if (destOutputs && destOutputs.length > 0) {
+    totalTarget = destOutputs.reduce((s, o) => s + o.value, 0);
+    baseVbytes += destOutputs.reduce((s, o) => s + (OUTPUT_VBYTES[o.type] || 31), 0);
+  } else {
+    baseVbytes += OUTPUT_VBYTES[destType] || 31;
+  }
+
+  const changeVbytes = OUTPUT_VBYTES[changeType] || 31;
 
   // Ghi lai "nhat ky" tung vong lap de DEBUG SAU co the in ra ly do chon.
   const trace = {
-    target, feeRate, destType, changeType, baseVbytes, changeVbytes,
+    target: totalTarget, feeRate, destType: destOutputs ? `multi (${destOutputs.length} outputs)` : destType, changeType, baseVbytes, changeVbytes,
     sorted: sorted.map((u) => ({ type: u.type, value: u.value, txid: u.txid, vout: u.vout })),
     steps: [],
   };
@@ -59,32 +70,32 @@ export function selectCoins({ utxos, target, feeRate, changeType = 'p2wpkh', des
     const step = {
       added: { type: utxo.type, value: utxo.value },
       inputSum, inputsVbytes, feeWithChange, feeNoChange,
-      needWithChange: target + feeWithChange,
-      needNoChange: target + feeNoChange,
+      needWithChange: totalTarget + feeWithChange,
+      needNoChange: totalTarget + feeNoChange,
       decision: 'chua du -> them UTXO tiep',
     };
     trace.steps.push(step);
 
     // Kich ban co change: du tien cho target + phi + it nhat 1 dust change?
-    if (inputSum >= target + feeWithChange) {
-      const change = inputSum - target - feeWithChange;
+    if (inputSum >= totalTarget + feeWithChange) {
+      const change = inputSum - totalTarget - feeWithChange;
       if (change >= DUST) {
         step.decision = `DU, change=${change} >= dust(${DUST}) -> TAO output change`;
         return { inputs: selected, fee: feeWithChange, change, changeType, trace };
       }
       // change qua nho -> gop luon vao phi, khong tao output change.
       step.decision = `DU nhung change=${change} < dust(${DUST}) -> gop change vao phi`;
-      return { inputs: selected, fee: inputSum - target, change: 0, changeType, trace };
+      return { inputs: selected, fee: inputSum - totalTarget, change: 0, changeType, trace };
     }
 
     // Kich ban khong change: vua khit (phan du nho hon dust cung gop vao phi).
-    if (inputSum >= target + feeNoChange && inputSum - target - feeNoChange < DUST) {
-      step.decision = `vua khit (khong change), phan du ${inputSum - target - feeNoChange} gop vao phi`;
-      return { inputs: selected, fee: inputSum - target, change: 0, changeType, trace };
+    if (inputSum >= totalTarget + feeNoChange && inputSum - totalTarget - feeNoChange < DUST) {
+      step.decision = `vua khit (khong change), phan du ${inputSum - totalTarget - feeNoChange} gop vao phi`;
+      return { inputs: selected, fee: inputSum - totalTarget, change: 0, changeType, trace };
     }
   }
 
   throw new Error(
-    `Khong du so du. Can it nhat ${target} sat + phi, chi gom duoc ${inputSum} sat tu ${sorted.length} UTXO.`
+    `Khong du so du. Can it nhat ${totalTarget} sat + phi, chi gom duoc ${inputSum} sat tu ${sorted.length} UTXO.`
   );
 }

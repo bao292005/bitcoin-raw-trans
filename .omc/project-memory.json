@@ -1,0 +1,81 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1788839492370,
+  "projectRoot": "/Users/nguyenquocbao/bitcoin-raw-trans",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": "npm test",
+    "lintCommand": null,
+    "devCommand": "npm run start",
+    "scripts": {
+      "start": "node --env-file=.env src/index.js",
+      "genkey": "node --env-file=.env src/index.js genkey",
+      "addr": "node --env-file=.env src/index.js addr",
+      "balance": "node --env-file=.env src/index.js balance",
+      "send": "node --env-file=.env src/index.js send",
+      "test": "node --env-file=.env test/selftest.js",
+      "walkthrough": "node --env-file=.env test/walkthrough.js"
+    }
+  },
+  "conventions": {
+    "namingStyle": "camelCase",
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "src",
+      "test"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 6,
+      "lastAccessed": 1788839492332,
+      "keyFiles": [
+        "api.js",
+        "coinselect.js",
+        "config.js",
+        "index.js",
+        "tx.js"
+      ]
+    },
+    "test": {
+      "path": "test",
+      "purpose": "Test files",
+      "fileCount": 2,
+      "lastAccessed": 1788839492334,
+      "keyFiles": [
+        "selftest.js",
+        "walkthrough.js"
+      ]
+    }
+  },
+  "hotPaths": [],
+  "userDirectives": []
+}

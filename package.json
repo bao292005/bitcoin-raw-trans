@@ -7,12 +7,12 @@
     "btc": "src/index.js"
   },
   "scripts": {
-    "start": "node src/index.js",
-    "genkey": "node src/index.js genkey",
-    "addr": "node src/index.js addr",
-    "balance": "node src/index.js balance",
-    "send": "node src/index.js send",
-    "test": "node test/selftest.js",
+    "start": "node --env-file=.env src/index.js",
+    "genkey": "node --env-file=.env src/index.js genkey",
+    "addr": "node --env-file=.env src/index.js addr",
+    "balance": "node --env-file=.env src/index.js balance",
+    "send": "node --env-file=.env src/index.js send",
+    "test": "node --env-file=.env test/selftest.js",
     "walkthrough": "node --env-file=.env test/walkthrough.js"
   },
   "dependencies": {

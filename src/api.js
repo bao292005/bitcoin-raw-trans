@@ -1,19 +1,43 @@
-// BUOC 2 & 8: Giao tiep voi mang luoi qua REST API (mempool.space).
+// BUOC 2 & 8: Giao tiep voi mang luoi qua REST API (blockstream.info / mempool.space).
 //  - Quet UTXO thuoc ve dia chi
 //  - Lay raw hex cua giao dich truoc (can cho input Legacy P2PKH)
 //  - Uoc luong phi (sat/vByte)
 //  - Phat song (broadcast) raw transaction
-import { API_BASE, FALLBACK_FEE_RATE } from './config.js';
+import { API_BASE, API_FALLBACKS, FALLBACK_FEE_RATE } from './config.js';
+
+async function fetchWithFallback(path, options = {}) {
+  const endpoints = process.env.API_BASE
+    ? [process.env.API_BASE, ...API_FALLBACKS]
+    : API_FALLBACKS;
+
+  const uniqueEndpoints = [...new Set(endpoints)];
+
+  let lastError;
+  for (const base of uniqueEndpoints) {
+    try {
+      const res = await fetch(`${base}${path}`, {
+        ...options,
+        signal: AbortSignal.timeout(5000), // Timeout 5s tranh treo mạng
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP ${res.status}: ${text}`);
+      }
+      return res;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || new Error(`Ket noi API that bai cho ${path}`);
+}
 
 async function getJson(path) {
-  const res = await fetch(`${API_BASE}${path}`);
-  if (!res.ok) throw new Error(`GET ${path} -> ${res.status} ${await res.text()}`);
+  const res = await fetchWithFallback(path);
   return res.json();
 }
 
 async function getText(path) {
-  const res = await fetch(`${API_BASE}${path}`);
-  if (!res.ok) throw new Error(`GET ${path} -> ${res.status} ${await res.text()}`);
+  const res = await fetchWithFallback(path);
   return res.text();
 }
 
@@ -40,12 +64,11 @@ export async function fetchFeeRate() {
 
 // Phat song raw hex len mang luoi. Tra ve txid.
 export async function broadcast(txHex) {
-  const res = await fetch(`${API_BASE}/tx`, {
+  const res = await fetchWithFallback('/tx', {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
     body: txHex,
   });
   const body = await res.text();
-  if (!res.ok) throw new Error(`Broadcast that bai (${res.status}): ${body}`);
   return body.trim(); // txid
 }

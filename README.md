@@ -31,11 +31,16 @@ node src/index.js addr <WIF>
 # 3. Quét UTXO & số dư trên cả 4 địa chỉ
 node src/index.js balance <WIF>
 
-# 4. Tạo + ký giao dịch (mặc định dry-run, in raw hex)
+# 4. Tạo + ký giao dịch gửi 1 người (mặc định dry-run, in raw hex)
 node src/index.js send <WIF> <địa_chỉ_nhận> <số_sat>
 
-# 5. Ký VÀ phát sóng luôn lên mạng lưới
-node src/index.js send <WIF> <địa_chỉ_nhận> <số_sat> --broadcast
+# 5. Gửi 1 lần cho NHIỀU ĐỊA CHỈ (Batching Transactions - tiết kiệm phí)
+node src/index.js send <WIF> <địa_chỉ_1> <sat_1> <địa_chỉ_2> <sat_2>
+# hoặc cú pháp dấu hai chấm:
+node src/index.js send <WIF> <địa_chỉ_1>:<sat_1> <địa_chỉ_2>:<sat_2>
+
+# 6. Ký VÀ phát sóng luôn lên mạng lưới (thêm cờ --broadcast)
+node src/index.js send <WIF> <địa_chỉ_1> <sat_1> <địa_chỉ_2> <sat_2> --broadcast
 ```
 
 ## Debug sâu (học từng bước)

@@ -58,7 +58,7 @@ async function scanAllUtxos(index) {
 async function cmdGenkey() {
   const kp = loadKeyPair();
   const { derived } = addressIndex(kp);
-  console.log('== Vi moi (testnet) ==');
+  console.log(`== Vi moi (${NETWORK_NAME}) ==`);
   console.log('Private key (WIF):', kp.toWIF());
   console.log('Public key       :', Buffer.from(kp.publicKey).toString('hex'));
   console.log('\nCac dia chi:');
@@ -97,13 +97,45 @@ async function cmdBalance(wif, flags = {}) {
   console.log(`\nTong so du: ${fmt(total)} tu ${utxos.length} UTXO`);
 }
 
-async function cmdSend(wif, to, amountStr, flags) {
-  const amount = Number(amountStr);
-  if (!Number.isInteger(amount) || amount <= 0) throw new Error('So sat phai la so nguyen duong.');
+function parseRecipients(args) {
+  const recipients = [];
+  let i = 0;
+  while (i < args.length) {
+    const item = args[i];
+    if (item.includes(':')) {
+      const parts = item.split(':');
+      const addr = parts[0];
+      const val = Number(parts[1]);
+      if (!addr || !Number.isInteger(val) || val <= 0) {
+        throw new Error(`Dinh dang khong hop le: ${item}. Dinh dang dung: <dia_chi>:<so_sat>`);
+      }
+      recipients.push({ address: addr, value: val, type: classifyAddress(addr) });
+      i++;
+    } else if (i + 1 < args.length && !isNaN(Number(args[i + 1]))) {
+      const addr = item;
+      const val = Number(args[i + 1]);
+      if (!Number.isInteger(val) || val <= 0) {
+        throw new Error(`So sat khong hop le cho ${addr}: ${args[i + 1]}`);
+      }
+      recipients.push({ address: addr, value: val, type: classifyAddress(addr) });
+      i += 2;
+    } else {
+      throw new Error(`Tham so nguoi nhan khong hop le: ${item}`);
+    }
+  }
 
+  if (!recipients.length) {
+    throw new Error('Thieu thong tin nguoi nhan. Vi du: node src/index.js send <WIF> <dia_chi> <so_sat> [dia_chi2 so_sat2 ...]');
+  }
+
+  return recipients;
+}
+
+async function cmdSend(wif, recipientArgs, flags) {
   const kp = loadKeyPair(wif);
   const { derived, index } = addressIndex(kp);
-  const destType = classifyAddress(to);
+  const recipients = parseRecipients(recipientArgs);
+  const totalTarget = recipients.reduce((s, r) => s + r.value, 0);
   const changeAddress = derived.p2wpkh.address; // tra tien thoi ve dia chi SegWit (output re)
 
   // DEBUG SAU (Buoc 1): mo nap phan khoa & dia chi truoc khi quet UTXO.
@@ -122,10 +154,10 @@ async function cmdSend(wif, to, amountStr, flags) {
   console.log('\n== Buoc 3: Lua chon UTXO (coin selection) ==');
   const selection = selectCoins({
     utxos: spendable,
-    target: amount,
+    target: totalTarget,
     feeRate,
     changeType: 'p2wpkh',
-    destType,
+    destOutputs: recipients,
   });
   if (flags.debug) explainCoinSelection(selection.trace);
   console.log(`  Chon ${selection.inputs.length} input, phi ~${fmt(selection.fee)}`);
@@ -141,7 +173,12 @@ async function cmdSend(wif, to, amountStr, flags) {
     }
   }
 
-  const outputs = [{ address: to, value: amount }];
+  const outputs = recipients.map((r) => ({ address: r.address, value: r.value }));
+  console.log(`  Gui ${recipients.length} output nguoi nhan (tong: ${fmt(totalTarget)}):`);
+  recipients.forEach((r, i) =>
+    console.log(`    out[${i}]: ${fmt(r.value)} -> ${r.address} (${r.type})`)
+  );
+
   if (selection.change > 0) {
     outputs.push({ address: changeAddress, value: selection.change });
     console.log(`  Output change: ${fmt(selection.change)} -> ${changeAddress}`);
@@ -169,26 +206,48 @@ async function cmdSend(wif, to, amountStr, flags) {
     console.log(`  Xem: ${API_BASE.replace('/api', '')}/tx/${sent}`);
   } else {
     console.log('  (dry-run) Them --broadcast de gui len mang luoi.');
-    console.log('  Hoac tu broadcast hex o tren tai https://mempool.space/testnet/tx/push');
+    console.log(`  Hoac tu broadcast hex o tren tai ${API_BASE.replace('/api', '')}/tx/push`);
   }
+}
+
+function extractWifAndRecipients(args) {
+  let wif = process.env.PRIVATE_KEY;
+  let recipientArgs = args;
+
+  if (args[0]) {
+    try {
+      loadKeyPair(args[0]);
+      wif = args[0];
+      recipientArgs = args.slice(1);
+    } catch {
+      // args[0] khong phai WIF, dung PRIVATE_KEY tu env
+    }
+  }
+
+  if (!wif) {
+    throw new Error('Thieu private key (WIF). Truyen tham so hoac dat PRIVATE_KEY trong .env.');
+  }
+
+  return { wif, recipientArgs };
 }
 
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const flags = { broadcast: rest.includes('--broadcast'), debug: rest.includes('--debug') };
   const args = rest.filter((a) => !a.startsWith('--'));
-  const wif = args[0] || process.env.PRIVATE_KEY;
 
   try {
     switch (cmd) {
       case 'genkey':
         return await cmdGenkey();
       case 'addr':
-        return await cmdAddr(requireWif(wif));
+        return await cmdAddr(requireWif(args[0] || process.env.PRIVATE_KEY));
       case 'balance':
-        return await cmdBalance(requireWif(wif), flags);
-      case 'send':
-        return await cmdSend(requireWif(wif), args[1], args[2], flags);
+        return await cmdBalance(requireWif(args[0] || process.env.PRIVATE_KEY), flags);
+      case 'send': {
+        const { wif, recipientArgs } = extractWifAndRecipients(args);
+        return await cmdSend(wif, recipientArgs, flags);
+      }
       default:
         printHelp();
     }
@@ -210,7 +269,9 @@ Cach dung:
   node src/index.js genkey
   node src/index.js addr    <WIF>
   node src/index.js balance <WIF>
-  node src/index.js send    <WIF> <dia_chi_nhan> <so_sat> [--broadcast] [--debug]
+  node src/index.js send    <WIF> <dia_chi> <so_sat> [--broadcast] [--debug]
+  node src/index.js send    <WIF> <dia_chi_1> <sat_1> <dia_chi_2> <sat_2> [...] [--broadcast] [--debug]
+  node src/index.js send    <WIF> <dia_chi_1>:<sat_1> <dia_chi_2>:<sat_2> [...] [--broadcast] [--debug]
 
 Co --debug: mo nap tung buoc (tu tinh sighash, tu ky, doi chieu voi PSBT).
 Private key co the dat qua bien moi truong PRIVATE_KEY thay cho tham so.`);
