@@ -13,11 +13,23 @@
     "balance": "node --env-file=.env src/index.js balance",
     "send": "node --env-file=.env src/index.js send",
     "test": "node --env-file=.env test/selftest.js",
-    "walkthrough": "node --env-file=.env test/walkthrough.js"
+    "walkthrough": "node --env-file=.env test/walkthrough.js",
+    "node:start": "./scripts/node.sh start",
+    "node:stop": "./scripts/node.sh stop",
+    "node:status": "./scripts/node.sh status",
+    "node:reset": "./scripts/node.sh reset",
+    "node:cli": "./scripts/node.sh cli",
+    "node:qt": "./scripts/node.sh qt",
+    "e2e": "node --env-file=.env test/e2e-regtest.js",
+    "web": "node --env-file=.env server.js",
+    "web:dev": "cd frontend && npm run dev",
+    "web:build": "cd frontend && npm install && npm run build",
+    "web:install": "cd frontend && npm install"
   },
   "dependencies": {
     "bitcoinjs-lib": "^6.1.6",
     "ecpair": "^2.1.0",
+    "express": "^5.2.1",
     "tiny-secp256k1": "^2.2.3"
   }
 }

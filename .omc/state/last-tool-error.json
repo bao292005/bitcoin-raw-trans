@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"npm run web:build 2>&1 | tail -8; echo \\\"--- kiem tra ---\\\"; ls -la /Users/nguyenquocbao/bitcoin-raw-trans/web/dist 2>/dev/null\",\"timeout\":300000,\"description\":\"Build web UI from project r...",
+  "error": "Exit code 1\n\n> bitcoin-raw-trans@1.0.0 web:build\n> cd web && npm install && npm run build\n\nsh: line 0: cd: web: No such file or directory\n--- kiem tra ---",
+  "timestamp": "2026-09-08T06:13:29.152Z",
+  "retry_count": 1
+}

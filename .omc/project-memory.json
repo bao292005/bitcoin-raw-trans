@@ -76,6 +76,145 @@
       ]
     }
   },
-  "hotPaths": [],
+  "hotPaths": [
+    {
+      "path": "src/index.js",
+      "accessCount": 18,
+      "lastAccessed": 1788850374830,
+      "type": "file"
+    },
+    {
+      "path": "server.js",
+      "accessCount": 12,
+      "lastAccessed": 1788848502466,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 11,
+      "lastAccessed": 1788850493977,
+      "type": "file"
+    },
+    {
+      "path": "src/coinselect.js",
+      "accessCount": 6,
+      "lastAccessed": 1788848472847,
+      "type": "file"
+    },
+    {
+      "path": "src/debug/inspect.js",
+      "accessCount": 5,
+      "lastAccessed": 1788841299184,
+      "type": "directory"
+    },
+    {
+      "path": "web/src/pages/PageNode.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1788847243624,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 4,
+      "lastAccessed": 1788848127596,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/pages/PageSend.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1788848652977,
+      "type": "file"
+    },
+    {
+      "path": "scripts/node.sh",
+      "accessCount": 4,
+      "lastAccessed": 1788850392219,
+      "type": "file"
+    },
+    {
+      "path": "src/config.js",
+      "accessCount": 2,
+      "lastAccessed": 1788840716378,
+      "type": "file"
+    },
+    {
+      "path": "src/api.js",
+      "accessCount": 2,
+      "lastAccessed": 1788840819567,
+      "type": "file"
+    },
+    {
+      "path": ".env",
+      "accessCount": 2,
+      "lastAccessed": 1788841158464,
+      "type": "file"
+    },
+    {
+      "path": "web/vite.config.ts",
+      "accessCount": 2,
+      "lastAccessed": 1788844143201,
+      "type": "file"
+    },
+    {
+      "path": "web/index.html",
+      "accessCount": 2,
+      "lastAccessed": 1788844161157,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/api.ts",
+      "accessCount": 2,
+      "lastAccessed": 1788848610779,
+      "type": "file"
+    },
+    {
+      "path": "src/rpc.js",
+      "accessCount": 2,
+      "lastAccessed": 1788850339682,
+      "type": "file"
+    },
+    {
+      "path": "src/wallet.js",
+      "accessCount": 1,
+      "lastAccessed": 1788839791616,
+      "type": "file"
+    },
+    {
+      "path": "src/tx.js",
+      "accessCount": 1,
+      "lastAccessed": 1788839797127,
+      "type": "file"
+    },
+    {
+      "path": "src/backend/bitcoind.js",
+      "accessCount": 1,
+      "lastAccessed": 1788840796181,
+      "type": "file"
+    },
+    {
+      "path": "src/backend/esplora.js",
+      "accessCount": 1,
+      "lastAccessed": 1788840810913,
+      "type": "file"
+    },
+    {
+      "path": "test/e2e-regtest.js",
+      "accessCount": 1,
+      "lastAccessed": 1788841354252,
+      "type": "file"
+    },
+    {
+      "path": "web/src",
+      "accessCount": 1,
+      "lastAccessed": 1788846549454,
+      "type": "directory"
+    },
+    {
+      "path": "web/src/api.ts",
+      "accessCount": 1,
+      "lastAccessed": 1788847168354,
+      "type": "file"
+    }
+  ],
   "userDirectives": []
 }

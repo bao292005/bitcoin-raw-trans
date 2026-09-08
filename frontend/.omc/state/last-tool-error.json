@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd web && npm install 2>&1 | tail -3 && echo \\\"--- deps ---\\\" && cat package.json\",\"timeout\":600000,\"description\":\"Install all web dependencies\"}",
+  "error": "Exit code 1\n(eval):cd:1: no such file or directory: web",
+  "timestamp": "2026-09-08T05:12:05.095Z",
+  "retry_count": 1
+}

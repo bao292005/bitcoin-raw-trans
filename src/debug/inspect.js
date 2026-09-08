@@ -8,7 +8,7 @@
 // Cuoi cung so HEX tu tay voi HEX do PSBT tao ra -> phai TRUNG KHOP tung byte.
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
-import { network } from '../config.js';
+import { network, USE_RPC } from '../config.js';
 import { toXOnly } from '../wallet.js';
 import {
   legacySighash,
@@ -101,14 +101,25 @@ export function explainAddresses(keyPair, derived, { revealSecret = false } = {}
 // index = { address: {type,...} }, utxos = mang phang da gan .address/.confirmed
 // ======================================================================
 export function explainUtxoScan({ apiBase, index, utxos }) {
-  rule('BUOC 2 · Quet UTXO (goi REST API cho tung dia chi)',
+  rule('BUOC 2 · Quet UTXO (hoi mang luoi cho tung dia chi)',
     'src/api.js › fetchUtxos()  ·  src/index.js › scanAllUtxos()');
-  line(C.dim(`  Endpoint: GET ${apiBase}/address/<dia_chi>/utxo  (JSON)`));
+  if (USE_RPC) {
+    line(C.dim(`  bitcoind JSON-RPC ${apiBase}`));
+    line(C.dim('  scantxoutset "start" [ "addr(<dia_chi>)#checksum" ]'));
+    line(C.dim('  -> quet thang tap UTXO, khong can import vi / rescan.'));
+    line(C.dim('  Luu y: chi thay UTXO DA VAO BLOCK, khong thay mempool.'));
+  } else {
+    line(C.dim(`  Endpoint: GET ${apiBase}/address/<dia_chi>/utxo  (JSON)`));
+  }
   for (const [address, meta] of Object.entries(index)) {
     const found = utxos.filter((u) => u.address === address);
     line();
     line(`  ${C.yellow(meta.type.padEnd(12))} ${address}`);
-    line(`    ${C.dim('GET')} /address/${address}/utxo  ${C.dim('->')} ${found.length} UTXO`);
+    line(
+      USE_RPC
+        ? `    ${C.dim('scantxoutset')} addr(${address})  ${C.dim('->')} ${found.length} UTXO`
+        : `    ${C.dim('GET')} /address/${address}/utxo  ${C.dim('->')} ${found.length} UTXO`
+    );
     for (const u of found) {
       const st = u.confirmed ? C.green('confirmed') : C.yellow('MEMPOOL (chua the chi)');
       line(`      • ${u.txid}:${u.vout}  ${u.value} sat  ${st}`);
@@ -162,11 +173,16 @@ export function explainCoinSelection(trace) {
 export function explainBroadcastRequest({ apiBase, hex, willSend }) {
   rule('BUOC 8 · Broadcast (phat song raw hex len mang luoi)',
     'src/api.js › broadcast()  ·  goi tu src/index.js › cmdSend()');
-  line(C.dim(`  POST ${apiBase}/tx`));
-  line(C.dim('  Content-Type: text/plain'));
+  if (USE_RPC) {
+    line(C.dim(`  bitcoind JSON-RPC ${apiBase}`));
+    line(C.dim('  sendrawtransaction "<raw_hex>"'));
+  } else {
+    line(C.dim(`  POST ${apiBase}/tx`));
+    line(C.dim('  Content-Type: text/plain'));
+  }
   kv('body (raw hex)', `${hex.length / 2} byte`);
   line(`    ${hex}`);
-  line(C.dim('  Response body la txid neu duoc chap nhan; loi neu tx khong hop le.'));
+  line(C.dim('  Tra ve txid neu duoc chap nhan; loi neu tx khong hop le.'));
   if (!willSend) line(C.yellow('  (dry-run: KHONG gui. Them --broadcast de phat song that.)'));
 }
 

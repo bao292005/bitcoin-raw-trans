@@ -6,11 +6,16 @@
 //   node src/index.js balance <WIF>          -> quet UTXO & so du tren cac dia chi
 //   node src/index.js send <WIF> <to> <sat> [--broadcast]
 //
+// Rieng NETWORK=regtest (mang local qua bitcoind RPC) co them:
+//   node src/index.js init                   -> tao vi miner + dao 101 block khoi dong
+//   node src/index.js mine <n> [dia_chi]     -> dao n block
+//   node src/index.js faucet <WIF> [sat]     -> rot tien vao CA 4 dia chi
+//
 // Private key co the truyen qua tham so hoac bien moi truong PRIVATE_KEY.
-import { network, NETWORK_NAME, API_BASE } from './config.js';
+import { network, NETWORK_NAME, API_BASE, USE_RPC } from './config.js';
 import { loadKeyPair, addressIndex } from './wallet.js';
 import { fetchUtxos, fetchTxHex, fetchFeeRate, broadcast } from './api.js';
-import { selectCoins } from './coinselect.js';
+import { selectCoins, dustThreshold } from './coinselect.js';
 import { buildAndSign } from './tx.js';
 import {
   explainAddresses,
@@ -55,6 +60,157 @@ async function scanAllUtxos(index) {
   return all;
 }
 
+// ---------------------------------------------------------------------------
+// Cac lenh chi danh cho mang local (regtest): dieu khien node qua RPC.
+// ---------------------------------------------------------------------------
+
+// Nap lazy de testnet/mainnet khong phai dinh toi module rpc.
+async function requireRegtest() {
+  if (!USE_RPC) {
+    throw new Error(
+      `Lenh nay chi dung duoc tren mang local. Dat NETWORK=regtest trong .env (dang la: ${NETWORK_NAME}).`
+    );
+  }
+  return import('./rpc.js');
+}
+
+// Coinbase phai cho 100 block moi tieu duoc -> dao 101 block la co tien ngay.
+const INIT_BLOCKS = 101;
+
+async function cmdInit() {
+  const { ensureWallet, getMinerAddress, mineBlocks, getChainInfo, getMinerBalance } =
+    await requireRegtest();
+
+  console.log('== Khoi dong mang local (regtest) ==');
+  const wallet = await ensureWallet();
+  console.log(`  Vi miner: "${wallet}"`);
+
+  const minerAddr = await getMinerAddress();
+  console.log(`  Dia chi nhan thuong dao: ${minerAddr}`);
+
+  const before = await getChainInfo();
+  console.log(`  Chieu cao hien tai: ${before.blocks}`);
+
+  const need = Math.max(0, INIT_BLOCKS - before.blocks);
+  if (need > 0) {
+    console.log(`  Dao ${need} block (coinbase can ${INIT_BLOCKS - 1} block de chin)...`);
+    await mineBlocks(need, minerAddr);
+  } else {
+    console.log('  Da du block, khong can dao them.');
+  }
+
+  const after = await getChainInfo();
+  console.log(`\n  Chieu cao moi : ${after.blocks}`);
+  console.log(`  So du miner   : ${fmt(await getMinerBalance())}`);
+  console.log('\nSan sang. Buoc tiep: node src/index.js faucet <WIF>');
+}
+
+async function cmdMine(nArg, address) {
+  const { mineBlocks, getChainInfo } = await requireRegtest();
+  const n = Number(nArg || 1);
+  if (!Number.isInteger(n) || n <= 0) throw new Error(`So block khong hop le: ${nArg}`);
+
+  const hashes = await mineBlocks(n, address || null);
+  const info = await getChainInfo();
+  console.log(`Da dao ${hashes.length} block. Chieu cao: ${info.blocks}`);
+  console.log(`  Block cuoi: ${hashes[hashes.length - 1]}`);
+}
+
+// Cac loai dia chi co the rot tien vao. Ten khoa nhu trong deriveAddresses().
+const ADDRESS_KEYS = ['p2pkh', 'p2sh', 'p2wpkh', 'p2tr'];
+
+// Doc co --only=p2tr,p2wpkh (hoac --only p2tr,p2wpkh) -> danh sach khoa.
+// Khong co co -> ca 4 loai.
+function parseOnly(onlyArg) {
+  if (!onlyArg) return ADDRESS_KEYS;
+
+  const keys = onlyArg
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (!keys.length) throw new Error('--only rong. Vi du: --only p2tr,p2wpkh');
+
+  for (const k of keys) {
+    if (!ADDRESS_KEYS.includes(k)) {
+      throw new Error(`Loai dia chi khong hop le: "${k}". Chon: ${ADDRESS_KEYS.join(', ')}.`);
+    }
+  }
+  return [...new Set(keys)];
+}
+
+async function cmdFaucet(wif, satArg, onlyArg) {
+  const { getMinerBalance, sendFromMiner, mineBlocks } = await requireRegtest();
+
+  const perAddress = Number(satArg || 1_000_000); // mac dinh 0.01 BTC moi dia chi
+  if (!Number.isInteger(perAddress) || perAddress <= 0) {
+    throw new Error(`So sat khong hop le: ${satArg}`);
+  }
+
+  const keys = parseOnly(onlyArg);
+  const kp = loadKeyPair(wif);
+  const { derived } = addressIndex(kp);
+
+  const balance = await getMinerBalance();
+  const total = perAddress * keys.length;
+  if (balance < total) {
+    throw new Error(
+      `Vi miner chi co ${fmt(balance)}, can ${fmt(total)}. Chay 'node src/index.js init' hoac dao them block.`
+    );
+  }
+
+  // Gui toi cac dia chi da chon trong MOT giao dich.
+  const targets = {};
+  for (const k of keys) targets[derived[k].address] = perAddress;
+
+  console.log(
+    `== Faucet: rot ${fmt(perAddress)} vao ${keys.length}/${ADDRESS_KEYS.length} dia chi ==`
+  );
+  for (const k of keys) {
+    console.log(`  [${derived[k].type.padEnd(12)}] ${derived[k].address}`);
+  }
+  console.log(`  Tong: ${fmt(total)}`);
+
+  const txid = await sendFromMiner(targets);
+  console.log(`\n  txid: ${txid}`);
+
+  // Dao 1 block de giao dich duoc confirm (scantxoutset chi thay UTXO da vao block).
+  await mineBlocks(1);
+  console.log('  Da dao 1 block de xac nhan.');
+  console.log('\nKiem tra: node src/index.js balance <WIF>');
+}
+
+// Nap vi CHI-XEM vao Bitcoin Core de nhin thay so du/lich su tren giao dien Qt.
+// Khong dua private key vao Core — chi descriptor suy tu public key.
+async function cmdWatch(wif, nameArg) {
+  const { ensureWatchWallet, importWatchDescriptors, watchSummary } = await requireRegtest();
+
+  const kp = loadKeyPair(wif);
+  const { derived } = addressIndex(kp);
+  const pubkey = Buffer.from(kp.publicKey).toString('hex');
+  const name = nameArg || `watch-${pubkey.slice(0, 8)}`;
+
+  console.log('== Nap vi chi-xem vao Bitcoin Core ==');
+  console.log(`  Ten vi   : ${name}`);
+  console.log(`  Public key: ${pubkey}`);
+
+  await ensureWatchWallet(name);
+  console.log('\n  Dang nap 4 descriptor va quet lai chuoi...');
+  const n = await importWatchDescriptors(name, pubkey);
+  console.log(`  Da nap ${n} descriptor:`);
+  for (const k of ADDRESS_KEYS) {
+    console.log(`    [${derived[k].type.padEnd(12)}] ${derived[k].address}`);
+  }
+
+  const s = await watchSummary(name);
+  console.log(`\n  So du    : ${fmt(s.balance)}`);
+  if (s.pending) console.log(`  Cho xac nhan: ${fmt(s.pending)}`);
+  console.log(`  Giao dich: ${s.txCount}`);
+
+  console.log(`\nMo Bitcoin-Qt tren datadir du an de xem:  npm run node:qt`);
+  console.log(`Trong Qt chon vi "${name}" o menu Window > Wallets.`);
+}
+
 async function cmdGenkey() {
   const kp = loadKeyPair();
   const { derived } = addressIndex(kp);
@@ -97,6 +253,19 @@ async function cmdBalance(wif, flags = {}) {
   console.log(`\nTong so du: ${fmt(total)} tu ${utxos.length} UTXO`);
 }
 
+// Chan output duoi nguong dust ngay tu dau, thay vi de mang luoi tu choi
+// luc broadcast ("dust, tx with dust output must be 0-fee").
+function checkDust(address, value, type) {
+  const min = dustThreshold(type);
+  if (value < min) {
+    throw new Error(
+      `${value} sat duoi nguong dust cho dia chi ${type} (toi thieu ${min} sat).\n` +
+        `  ${address}\n` +
+        `  Output nho hon nguong nay ton phi de tieu hon ca gia tri no mang, nen mang luoi tu choi.`
+    );
+  }
+}
+
 function parseRecipients(args) {
   const recipients = [];
   let i = 0;
@@ -109,7 +278,11 @@ function parseRecipients(args) {
       if (!addr || !Number.isInteger(val) || val <= 0) {
         throw new Error(`Dinh dang khong hop le: ${item}. Dinh dang dung: <dia_chi>:<so_sat>`);
       }
-      recipients.push({ address: addr, value: val, type: classifyAddress(addr) });
+      {
+        const type = classifyAddress(addr);
+        checkDust(addr, val, type);
+        recipients.push({ address: addr, value: val, type });
+      }
       i++;
     } else if (i + 1 < args.length && !isNaN(Number(args[i + 1]))) {
       const addr = item;
@@ -117,7 +290,11 @@ function parseRecipients(args) {
       if (!Number.isInteger(val) || val <= 0) {
         throw new Error(`So sat khong hop le cho ${addr}: ${args[i + 1]}`);
       }
-      recipients.push({ address: addr, value: val, type: classifyAddress(addr) });
+      {
+        const type = classifyAddress(addr);
+        checkDust(addr, val, type);
+        recipients.push({ address: addr, value: val, type });
+      }
       i += 2;
     } else {
       throw new Error(`Tham so nguoi nhan khong hop le: ${item}`);
@@ -203,10 +380,21 @@ async function cmdSend(wif, recipientArgs, flags) {
   if (flags.broadcast) {
     const sent = await broadcast(hex);
     console.log(`  DA PHAT SONG! txid: ${sent}`);
-    console.log(`  Xem: ${API_BASE.replace('/api', '')}/tx/${sent}`);
+    if (USE_RPC) {
+      // Tren mang local khong ai dao ho -> tu dao 1 block de giao dich confirm.
+      const { mineBlocks } = await import('./rpc.js');
+      await mineBlocks(1);
+      console.log('  Da dao 1 block -> giao dich da confirmed.');
+    } else {
+      console.log(`  Xem: ${API_BASE.replace('/api', '')}/tx/${sent}`);
+    }
   } else {
     console.log('  (dry-run) Them --broadcast de gui len mang luoi.');
-    console.log(`  Hoac tu broadcast hex o tren tai ${API_BASE.replace('/api', '')}/tx/push`);
+    console.log(
+      USE_RPC
+        ? '  Hoac tu gui: npm run node:cli -- sendrawtransaction <raw_hex>'
+        : `  Hoac tu broadcast hex o tren tai ${API_BASE.replace('/api', '')}/tx/push`
+    );
   }
 }
 
@@ -234,10 +422,36 @@ function extractWifAndRecipients(args) {
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const flags = { broadcast: rest.includes('--broadcast'), debug: rest.includes('--debug') };
-  const args = rest.filter((a) => !a.startsWith('--'));
+
+  // Tach co co gia tri: ho tro ca "--only=a,b" lan "--only a,b".
+  const args = [];
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (a.startsWith('--only=')) {
+      flags.only = a.slice('--only='.length);
+    } else if (a === '--only') {
+      flags.only = rest[++i];
+    } else if (a.startsWith('--name=')) {
+      flags.name = a.slice('--name='.length);
+    } else if (a === '--name') {
+      flags.name = rest[++i];
+    } else if (!a.startsWith('--')) {
+      args.push(a);
+    }
+  }
 
   try {
     switch (cmd) {
+      case 'init':
+        return await cmdInit();
+      case 'mine':
+        return await cmdMine(args[0], args[1]);
+      case 'faucet': {
+        const { wif, recipientArgs } = extractWifAndRecipients(args);
+        return await cmdFaucet(wif, recipientArgs[0], flags.only);
+      }
+      case 'watch':
+        return await cmdWatch(requireWif(args[0] || process.env.PRIVATE_KEY), flags.name);
       case 'genkey':
         return await cmdGenkey();
       case 'addr':
@@ -264,7 +478,22 @@ function requireWif(wif) {
 
 function printHelp() {
   console.log(`bitcoin-raw-trans (mang: ${NETWORK_NAME})
-
+${
+  USE_RPC
+    ? `
+Mang local qua bitcoind RPC (${API_BASE}):
+  node src/index.js init                  # tao vi miner + dao 101 block
+  node src/index.js mine    <n> [dia_chi] # dao them n block
+  node src/index.js faucet  <WIF> [sat]   # rot tien vao ca 4 dia chi
+  node src/index.js faucet  <WIF> [sat] --only p2tr,p2wpkh
+                                          # chi rot vao loai da chon
+                                          # (p2pkh | p2sh | p2wpkh | p2tr)
+  node src/index.js watch   <WIF> [--name X]
+                                          # nap vi CHI-XEM vao Bitcoin Core
+                                          # de xem so du/lich su tren Bitcoin-Qt
+`
+    : ''
+}
 Cach dung:
   node src/index.js genkey
   node src/index.js addr    <WIF>
